@@ -202,6 +202,7 @@ def fetch_groups_from_file(fd):
 			line = fd.readline()
 			continue
 		group, users = line.split(":")
+		groups[group.strip()] = {}
 		groups[group.strip()]["cn"] = users.strip().split(",")
 		groups[group.strip()]["networks"] = []
 		line = fd.readline()
