@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 # vim: set noexpandtab:ts=4
 # Requires:
-# python-ldap
 #
 # Version: MPL 1.1/GPL 2.0/LGPL 2.1
 #
@@ -40,10 +39,8 @@
 
 import os
 import sys
-import ldap
 import fcntl
-import time
-import signal, errno
+import signal
 import mozdef
 from contextlib import contextmanager
 import imp
@@ -56,6 +53,9 @@ for cfg in cfg_path:
 		config = imp.load_source('config', cfg)
 	except:
 		pass
+
+if config.LDAP_ENABLE:
+	import ldap
 
 if config == None:
 	print("Failed to load config")
@@ -191,6 +191,22 @@ def fetch_ips_from_file(fd):
 		line = fd.readline()
 	return rules
 
+def fetch_groups_from_file(fd):
+	"""
+		Read the groups from a local file and return them into a dictionary
+	"""
+	groups = {}
+	line = fd.readline()
+	while line != '':
+		if line.startswith('#'):
+			line = fd.readline()
+			continue
+		group, users = line.split(":")
+		groups[group.strip()]["cn"] = users.strip().split(",")
+		groups[group.strip()]["networks"] = []
+		line = fd.readline()
+	return groups
+
 def load_ldap():
 	"""
 		Query the LDAP directory for a full list of VPN groups.
@@ -313,12 +329,25 @@ def load_rules(usersrcip, usercn, dev):
 	"""
 	usergroups = ""
 	uniq_nets = list()
-	schema = load_ldap()
+
+	if config.LDAP_ENABLE:
+		schema = load_ldap()
+	else:
+		group_file = config.RULES + "/groups"
+		try:
+			fd = open(group_file)
+		except:
+			# Skip if file is not found
+			mdmsg.send(summary="Failed to open group file", details={'group_file': group_file})
+			return []
+		schema = fetch_groups_from_file(fd)
+
 	for group in schema:
 		if usercn in schema[group]['cn']:
 			networks = schema[group]['networks']
 			load_group_rule(usersrcip, usercn, dev, group, networks, uniq_nets)
 			usergroups += group + ';'
+
 	load_per_user_rules(usersrcip, usercn, dev)
 	return usergroups
 
